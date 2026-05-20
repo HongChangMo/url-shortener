@@ -51,20 +51,25 @@ class UrlRepositoryTest {
         repository.save(new Url("a", "https://a.com").withAccessCount(100));
         repository.save(new Url("b", "https://b.com").withAccessCount(50));
 
-        List<Url> top = repository.findTopNByAccessCount(1);
+        List<Url> top1 = repository.findTopNByAccessCount(1);
+        assertThat(top1).hasSize(1);
+        assertThat(top1.get(0).getShortCode()).isEqualTo("a");
 
-        assertThat(top).hasSize(1);
-        assertThat(top.get(0).getShortCode()).isEqualTo("a");
+        List<Url> top2 = repository.findTopNByAccessCount(2);
+        assertThat(top2).hasSize(2);
     }
 
     @Test
     void deleteExpired_removesExpiredUrls() {
         Url expired = new Url("exp", "https://expired.com")
             .withExpiredAt(OffsetDateTime.now().minusDays(1));
+        Url active = new Url("active", "https://active.com");
         repository.save(expired);
+        repository.save(active);
 
         repository.deleteExpired(OffsetDateTime.now());
 
         assertThat(repository.findByShortCode("exp")).isEmpty();
+        assertThat(repository.findByShortCode("active")).isPresent();
     }
 }

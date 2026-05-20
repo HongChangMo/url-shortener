@@ -11,7 +11,7 @@ public class Url {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "short_code", nullable = false, unique = true, length = 10)
+    @Column(name = "short_code", nullable = false, unique = true, length = 10, updatable = false)
     private String shortCode;
 
     @Column(name = "original_url", nullable = false, columnDefinition = "TEXT")
@@ -20,7 +20,7 @@ public class Url {
     @Column(name = "access_count", nullable = false)
     private long accessCount = 0;
 
-    @Column(name = "created_at", nullable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt = OffsetDateTime.now();
 
     @Column(name = "expired_at")
