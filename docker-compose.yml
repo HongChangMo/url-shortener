@@ -22,6 +22,10 @@ services:
     image: valkey/valkey:8
     ports: ["6379:6379"]
 
+  api-server:
+    image: kennethreitz/httpbin
+    ports: ["9090:80"]
+
   k6-smoke:
     image: grafana/k6:latest
     profiles: [smoke]
@@ -29,7 +33,8 @@ services:
     command: run /scripts/smoke.js
     environment:
       - BASE_URL=http://shortener:8080
-    depends_on: [shortener]
+      - API_SERVER=http://api-server:80
+    depends_on: [shortener, api-server]
 
   k6-load:
     image: grafana/k6:latest
@@ -38,7 +43,8 @@ services:
     command: run /scripts/load.js
     environment:
       - BASE_URL=http://shortener:8080
-    depends_on: [shortener]
+      - API_SERVER=http://api-server:80
+    depends_on: [shortener, api-server]
 
   k6-stress:
     image: grafana/k6:latest
@@ -47,7 +53,8 @@ services:
     command: run /scripts/stress.js
     environment:
       - BASE_URL=http://shortener:8080
-    depends_on: [shortener]
+      - API_SERVER=http://api-server:80
+    depends_on: [shortener, api-server]
 
 volumes:
   pgdata:

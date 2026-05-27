@@ -16,6 +16,7 @@ export const options = {
 };
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+const API_SERVER = __ENV.API_SERVER || 'http://localhost:9090';
 
 function vuIp() {
   return `10.0.${Math.floor(__VU / 256)}.${__VU % 256}`;
@@ -30,7 +31,7 @@ export function setup() {
   for (let i = 0; i < 20; i++) {
     const res = http.post(
       `${BASE_URL}/api/v1/data/shorten`,
-      JSON.stringify({ originalUrl: `https://example.com/stress-${i}` }),
+      JSON.stringify({ originalUrl: `${API_SERVER}/anything/stress-${i}` }),
       { headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '10.0.0.0' } }
     );
     if (res.status === 200) {
@@ -47,11 +48,14 @@ export default function ({ codes }) {
       headers: headers(),
       redirects: 0,
     });
-    check(res, { 'redirect 302': (r) => r.status === 302 });
+    check(res, {
+      'redirect 302': (r) => r.status === 302,
+      'location header exists': (r) => r.headers['Location'] !== undefined,
+    });
   } else {
     const res = http.post(
       `${BASE_URL}/api/v1/data/shorten`,
-      JSON.stringify({ originalUrl: `https://example.com/stress-${Date.now()}` }),
+      JSON.stringify({ originalUrl: `${API_SERVER}/anything/stress-${Date.now()}` }),
       { headers: headers() }
     );
     check(res, { 'shorten 200': (r) => r.status === 200 });

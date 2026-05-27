@@ -1,0 +1,193 @@
+{
+  "project": "url-shortener",
+  "updated": "2026-05-27",
+  "features": [
+    {
+      "id": "project-setup",
+      "priority": 1,
+      "area": "infra",
+      "title": "프로젝트 초기 설정 & Gradle 멀티모듈 구성",
+      "user_visible_behavior": "common/, shortener/ 모듈이 정상 빌드되고 UrlShortenerApplication이 기동된다",
+      "status": "passing",
+      "verification": [
+        "./gradlew build -x test 빌드 성공 확인",
+        "shortener 모듈과 common 모듈이 각각 존재하는지 확인"
+      ],
+      "evidence": "BUILD SUCCESSFUL — Gradle 멀티모듈 빌드 완료",
+      "notes": "Spring Boot 3.4, Java 21, Virtual Threads 활성화"
+    },
+    {
+      "id": "infra-compose",
+      "priority": 2,
+      "area": "infra",
+      "title": "Docker Compose 인프라 구성",
+      "user_visible_behavior": "docker compose up으로 shortener, postgres, valkey가 기동되고 API가 응답한다",
+      "status": "passing",
+      "verification": [
+        "docker compose up --build 실행",
+        "curl http://localhost:8080/actuator/health 응답 확인"
+      ],
+      "evidence": "docker compose up --build 정상 기동 확인. Dockerfile 멀티스테이지 빌드 적용",
+      "notes": "shortener/Dockerfile 멀티스테이지 빌드 (eclipse-temurin:21-jdk → jre), DB_HOST 환경변수화"
+    },
+    {
+      "id": "url-entity",
+      "priority": 3,
+      "area": "core",
+      "title": "URL JPA Entity & Repository",
+      "user_visible_behavior": "URL 단축 요청 시 DB에 레코드가 생성되고 shortCode로 조회된다",
+      "status": "passing",
+      "verification": [
+        "./gradlew :shortener:test --tests '*UrlRepositoryTest*'",
+        "findByShortCode, findTopNByAccessCount, deleteExpired 테스트 통과 확인"
+      ],
+      "evidence": "UrlRepositoryTest 4 tests passed — @DataJpaTest + Testcontainers",
+      "notes": "domain/Url.java Entity, UrlJpaRepository interface"
+    },
+    {
+      "id": "short-code-gen",
+      "priority": 4,
+      "area": "core",
+      "title": "단축 코드 생성 (Sqids)",
+      "user_visible_behavior": "POST /api/v1/data/shorten 호출 시 6자 이상의 고유 shortCode가 반환된다",
+      "status": "passing",
+      "verification": [
+        "./gradlew :shortener:test --tests '*ShortCodeGeneratorTest*'",
+        "동일 URL 재요청 시 같은 shortCode 반환 확인"
+      ],
+      "evidence": "ShortCodeGeneratorTest passed — Sqids(Feistel+Base62), minLength=6",
+      "notes": "sqids-salt는 application.yml SQIDS_SALT 환경변수로 주입"
+    },
+    {
+      "id": "cache-service",
+      "priority": 5,
+      "area": "cache",
+      "title": "Valkey Cache-Aside 서비스",
+      "user_visible_behavior": "redirect 요청 시 Valkey에서 캐시 히트하면 DB 조회 없이 응답한다",
+      "status": "passing",
+      "verification": [
+        "./gradlew :shortener:test --tests '*UrlCacheServiceTest*'",
+        "get/put/evict + TTL 24h 동작 확인"
+      ],
+      "evidence": "UrlCacheServiceTest passed — @DataRedisTest + Testcontainers Valkey",
+      "notes": "RedisTemplate<String, String> 사용, TTL 24시간"
+    },
+    {
+      "id": "url-shorten-api",
+      "priority": 6,
+      "area": "api",
+      "title": "URL 단축 & 리다이렉트 API",
+      "user_visible_behavior": "POST /api/v1/data/shorten → shortCode 반환, GET /api/v1/{shortCode} → 302 redirect",
+      "status": "passing",
+      "verification": [
+        "./gradlew :shortener:test --tests '*UrlApiE2ETest*'",
+        "shorten_then_redirect_fullFlow 통과",
+        "redirect_unknownCode_returns404 통과"
+      ],
+      "evidence": "UrlApiE2ETest passed — @SpringBootTest RANDOM_PORT + Testcontainers",
+      "notes": "GlobalExceptionHandler: 404(UrlNotFoundException), 410(UrlExpiredException)"
+    },
+    {
+      "id": "rate-limiting",
+      "priority": 7,
+      "area": "api",
+      "title": "Rate Limiting (Bucket4j 토큰 버킷)",
+      "user_visible_behavior": "단축 요청이 10회 초과 시 429 Too Many Requests 반환, IP별 독립 버킷",
+      "status": "passing",
+      "verification": [
+        "./gradlew :shortener:test --tests '*RateLimitServiceTest*'",
+        "./gradlew :shortener:test --tests '*UrlApiE2ETest*shorten_exceedRateLimit*'",
+        "버킷 소진 시 429 응답 확인"
+      ],
+      "evidence": "RateLimitServiceTest + UrlApiE2ETest#shorten_exceedRateLimit_returns429 passed. PR #2 merged",
+      "notes": "Bucket4j 8.14.0, CAS 기반(WATCH/MULTI/EXEC), Valkey 저장. shorten: cap=10 refill=5/s, redirect: cap=100 refill=100/s"
+    },
+    {
+      "id": "k6-perf-tests",
+      "priority": 8,
+      "area": "testing",
+      "title": "k6 성능 테스트 (smoke / load / stress)",
+      "user_visible_behavior": "docker compose --profile smoke up k6-smoke 실행 시 thresholds 통과",
+      "status": "passing",
+      "verification": [
+        "k6 run k6/scripts/smoke.js (로컬)",
+        "docker compose --profile smoke up --no-deps k6-smoke (Docker)",
+        "http_req_failed < 1%, p(95) < 500ms 확인"
+      ],
+      "evidence": "smoke/load/stress 스크립트 작성 완료. VU별 X-Forwarded-For IP 분산 적용",
+      "notes": "BASE_URL 기본값 localhost:8080 (Docker 실행 시 http://shortener:8080 주입)"
+    },
+    {
+      "id": "api-server",
+      "priority": 9,
+      "area": "testing",
+      "title": "검증용 API 서버 (httpbin)",
+      "user_visible_behavior": "단축 URL 접근 시 302 redirect → httpbin 엔드포인트 실제 호출 → 200 응답 확인",
+      "status": "in_progress",
+      "verification": [
+        "docker compose up api-server 기동 확인",
+        "curl http://localhost:9090/get 응답 확인",
+        "k6 스크립트에서 originalUrl을 http://api-server:9090/anything/... 으로 변경 후 실행",
+        "302 → 200 전체 체인 검증 확인"
+      ],
+      "evidence": "",
+      "notes": "kennethreitz/httpbin 이미지 사용. k6에서 API_SERVER 환경변수로 주입"
+    },
+    {
+      "id": "cache-warming",
+      "priority": 10,
+      "area": "cache",
+      "title": "Cache Warming (서버 시작 시 Top N 선적재)",
+      "user_visible_behavior": "서버 기동 후 access_count 상위 N개 URL이 Valkey에 미리 캐싱되어 첫 요청부터 캐시 히트",
+      "status": "not_started",
+      "verification": [
+        "서버 기동 후 valkey-cli keys rate:* 로 캐시 확인",
+        "상위 N개 shortCode 첫 요청 시 DB 쿼리 없이 응답 확인 (로그)"
+      ],
+      "evidence": "",
+      "notes": "Phase 2 항목. shortener.cache-warm-size 설정값(기본 1000) 사용. ApplicationReadyEvent 활용 예정"
+    },
+    {
+      "id": "sqs-access-count",
+      "priority": 11,
+      "area": "async",
+      "title": "SQS Access Count Publisher",
+      "user_visible_behavior": "redirect 요청마다 DB UPDATE 없이 SQS에 메시지 발행, DB 부하 감소",
+      "status": "not_started",
+      "verification": [
+        "redirect 요청 후 LocalStack SQS 큐에 메시지 적재 확인",
+        "aws --endpoint-url=http://localhost:4566 sqs receive-message --queue-url ..."
+      ],
+      "evidence": "",
+      "notes": "Phase 2 항목. LocalStack SQS 사용. 현재 동기 DB UPDATE를 비동기 배치로 전환"
+    },
+    {
+      "id": "lambda-access-count",
+      "priority": 12,
+      "area": "async",
+      "title": "Lambda — access_count 배치 처리",
+      "user_visible_behavior": "1분 주기로 SQS 메시지를 소비해 access_count를 bulk UPDATE, DB 쓰기 부하 감소",
+      "status": "not_started",
+      "verification": [
+        "1분 대기 후 urls 테이블 access_count 증가 확인",
+        "SQS 큐 메시지 수 0으로 감소 확인"
+      ],
+      "evidence": "",
+      "notes": "Phase 2 항목. LocalStack Lambda + CloudWatch Events 사용"
+    },
+    {
+      "id": "lambda-cleanup",
+      "priority": 13,
+      "area": "async",
+      "title": "Lambda — 만료 URL 정리 (1일 주기)",
+      "user_visible_behavior": "만료된 URL이 1일 주기로 DB에서 삭제되어 스토리지 낭비 방지",
+      "status": "not_started",
+      "verification": [
+        "만료 URL 삽입 후 Lambda 실행 → DB에서 삭제 확인",
+        "만료 URL 접근 시 410 Gone 응답 확인"
+      ],
+      "evidence": "",
+      "notes": "Phase 2 항목. LocalStack Lambda + CloudWatch Events (1일 주기)"
+    }
+  ]
+}
