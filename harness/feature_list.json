@@ -148,46 +148,49 @@
       "notes": "Phase 2 항목. shortener.cache-warm-size 설정값(기본 1000) 사용. ApplicationReadyEvent 활용 예정"
     },
     {
-      "id": "sqs-access-count",
+      "id": "batch-access-count",
       "priority": 11,
       "area": "async",
-      "title": "SQS Access Count Publisher",
-      "user_visible_behavior": "redirect 요청마다 DB UPDATE 없이 SQS에 메시지 발행, DB 부하 감소",
+      "title": "Spring Batch — access_count 비동기 처리",
+      "user_visible_behavior": "redirect 요청 시 DB UPDATE 없이 Valkey Sorted Set에 카운터 누적, 1분 주기 Batch가 bulk UPDATE로 DB 동기화",
       "status": "not_started",
       "verification": [
-        "redirect 요청 후 LocalStack SQS 큐에 메시지 적재 확인",
-        "aws --endpoint-url=http://localhost:4566 sqs receive-message --queue-url ..."
+        "redirect 요청 후 valkey-cli ZSCORE url:hits {shortCode} 값 증가 확인",
+        "1분 대기 후 urls 테이블 access_count 증가 확인",
+        "Valkey ZSET 카운터 리셋 확인"
       ],
       "evidence": "",
-      "notes": "Phase 2 항목. LocalStack SQS 사용. 현재 동기 DB UPDATE를 비동기 배치로 전환"
+      "notes": "MVP 단계. Valkey ZINCRBY로 카운터 누적, Spring Batch @Scheduled(1분)으로 delta bulk UPDATE 후 ZSET 초기화. 추후 Phase 4에서 SQS + Lambda로 교체 예정"
     },
     {
-      "id": "lambda-access-count",
+      "id": "batch-cleanup",
       "priority": 12,
       "area": "async",
-      "title": "Lambda — access_count 배치 처리",
-      "user_visible_behavior": "1분 주기로 SQS 메시지를 소비해 access_count를 bulk UPDATE, DB 쓰기 부하 감소",
-      "status": "not_started",
-      "verification": [
-        "1분 대기 후 urls 테이블 access_count 증가 확인",
-        "SQS 큐 메시지 수 0으로 감소 확인"
-      ],
-      "evidence": "",
-      "notes": "Phase 2 항목. LocalStack Lambda + CloudWatch Events 사용"
-    },
-    {
-      "id": "lambda-cleanup",
-      "priority": 13,
-      "area": "async",
-      "title": "Lambda — 만료 URL 정리 (1일 주기)",
+      "title": "Spring Batch — 만료 URL 정리 (1일 주기)",
       "user_visible_behavior": "만료된 URL이 1일 주기로 DB에서 삭제되어 스토리지 낭비 방지",
       "status": "not_started",
       "verification": [
-        "만료 URL 삽입 후 Lambda 실행 → DB에서 삭제 확인",
+        "만료 URL 삽입 후 1일 주기 Batch 실행 → DB에서 삭제 확인",
         "만료 URL 접근 시 410 Gone 응답 확인"
       ],
       "evidence": "",
-      "notes": "Phase 2 항목. LocalStack Lambda + CloudWatch Events (1일 주기)"
+      "notes": "MVP 단계. Spring Batch @Scheduled(1일)으로 expired_at < NOW() 인 레코드 DELETE. 추후 Phase 4에서 Lambda + CloudWatch Events로 교체 예정"
+    },
+    {
+      "id": "localstack-migration",
+      "priority": 20,
+      "area": "infra",
+      "title": "LocalStack 전환 — SQS + Lambda + Secrets Manager",
+      "user_visible_behavior": "access_count 처리와 만료 URL 정리가 SQS + Lambda로 동작, Secrets Manager에서 자격증명 로드",
+      "status": "not_started",
+      "verification": [
+        "docker compose up localstack 기동 확인",
+        "redirect 요청 후 SQS 큐에 메시지 적재 확인",
+        "Lambda 실행 후 access_count DB 반영 확인",
+        "Secrets Manager에서 DB 자격증명 로드 확인"
+      ],
+      "evidence": "",
+      "notes": "Phase 4 항목. Spring Batch(batch-access-count, batch-cleanup)를 SQS + Lambda로 교체. AWS_ENDPOINT 환경변수 전환만으로 LocalStack → 실제 AWS 전환 가능하도록 설계"
     }
   ]
 }
