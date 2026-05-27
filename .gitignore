@@ -1,2 +1,24 @@
-docs/plans/
+# Gradle
+.gradle/
+build/
+*/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Spring Boot
+*.log
+application-local.yml
+
+# Worktrees / Plans
 .worktrees/
+docs/plans/
