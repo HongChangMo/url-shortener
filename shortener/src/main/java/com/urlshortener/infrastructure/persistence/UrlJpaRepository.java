@@ -1,4 +1,4 @@
-package com.urlshortener.repository;
+package com.urlshortener.infrastructure.persistence;
 
 import com.urlshortener.domain.Url;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -11,7 +11,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
-public interface UrlRepository extends JpaRepository<Url, Long> {
+public interface UrlJpaRepository extends JpaRepository<Url, Long> {
 
     Optional<Url> findByShortCode(String shortCode);
 
@@ -22,6 +22,11 @@ public interface UrlRepository extends JpaRepository<Url, Long> {
     @Transactional
     @Query("DELETE FROM Url u WHERE u.expiredAt IS NOT NULL AND u.expiredAt < :now")
     void deleteExpired(@Param("now") OffsetDateTime now);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE Url u SET u.shortCode = :shortCode WHERE u.id = :id")
+    void setShortCode(@Param("id") Long id, @Param("shortCode") String shortCode);
 
     @Modifying
     @Transactional

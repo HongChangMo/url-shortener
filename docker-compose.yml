@@ -1,35 +1,11 @@
 services:
-  nginx:
-    image: nginx:alpine
-    ports: ["80:80"]
-    volumes: ["./nginx/nginx.conf:/etc/nginx/nginx.conf:ro"]
-    depends_on: [shortener-1, shortener-2]
-
-  shortener-1:
+  shortener:
     build: ./shortener
+    ports: ["8080:8080"]
     environment:
-      - AWS_ENDPOINT=http://localstack:4566
-      - AWS_ACCESS_KEY_ID=test
-      - AWS_SECRET_ACCESS_KEY=test
-      - AWS_REGION=ap-northeast-2
       - DB_PASSWORD=postgres
       - VALKEY_HOST=valkey
-    depends_on: [postgres, valkey, localstack]
-
-  shortener-2:
-    build: ./shortener
-    environment:
-      - AWS_ENDPOINT=http://localstack:4566
-      - AWS_ACCESS_KEY_ID=test
-      - AWS_SECRET_ACCESS_KEY=test
-      - AWS_REGION=ap-northeast-2
-      - DB_PASSWORD=postgres
-      - VALKEY_HOST=valkey
-    depends_on: [postgres, valkey, localstack]
-
-  api-server:
-    build: ./api
-    ports: ["8081:8081"]
+    depends_on: [postgres, valkey]
 
   postgres:
     image: postgres:16
@@ -43,13 +19,32 @@ services:
     image: valkey/valkey:8
     ports: ["6379:6379"]
 
-  localstack:
-    image: localstack/localstack:3
-    ports: ["4566:4566"]
+  k6-smoke:
+    image: grafana/k6:latest
+    profiles: [smoke]
+    volumes: ["./k6/scripts:/scripts"]
+    command: run /scripts/smoke.js
     environment:
-      - SERVICES=sqs,lambda,secretsmanager,cloudwatch
-    volumes:
-      - "./localstack/init:/etc/localstack/init/ready.d"
+      - BASE_URL=http://shortener:8080
+    depends_on: [shortener]
+
+  k6-load:
+    image: grafana/k6:latest
+    profiles: [load]
+    volumes: ["./k6/scripts:/scripts"]
+    command: run /scripts/load.js
+    environment:
+      - BASE_URL=http://shortener:8080
+    depends_on: [shortener]
+
+  k6-stress:
+    image: grafana/k6:latest
+    profiles: [stress]
+    volumes: ["./k6/scripts:/scripts"]
+    command: run /scripts/stress.js
+    environment:
+      - BASE_URL=http://shortener:8080
+    depends_on: [shortener]
 
 volumes:
   pgdata:

@@ -1,4 +1,4 @@
-package com.urlshortener.repository;
+package com.urlshortener.infrastructure.persistence;
 
 import com.urlshortener.domain.Url;
 import org.junit.jupiter.api.Test;
@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Testcontainers
-class UrlRepositoryTest {
+class UrlJpaRepositoryTest {
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16");
@@ -33,12 +33,11 @@ class UrlRepositoryTest {
     }
 
     @Autowired
-    UrlRepository repository;
+    UrlJpaRepository repository;
 
     @Test
     void findByShortCode_returnsUrl() {
-        Url url = new Url("abc123", "https://example.com");
-        repository.save(url);
+        repository.save(Url.builder().shortCode("abc123").originalUrl("https://example.com").build());
 
         Optional<Url> found = repository.findByShortCode("abc123");
 
@@ -48,8 +47,8 @@ class UrlRepositoryTest {
 
     @Test
     void findTopByAccessCount_returnsOrdered() {
-        repository.save(new Url("a", "https://a.com").withAccessCount(100));
-        repository.save(new Url("b", "https://b.com").withAccessCount(50));
+        repository.save(Url.builder().shortCode("a").originalUrl("https://a.com").accessCount(100).build());
+        repository.save(Url.builder().shortCode("b").originalUrl("https://b.com").accessCount(50).build());
 
         List<Url> top1 = repository.findTopNByAccessCount(1);
         assertThat(top1).hasSize(1);
@@ -61,11 +60,12 @@ class UrlRepositoryTest {
 
     @Test
     void deleteExpired_removesExpiredUrls() {
-        Url expired = new Url("exp", "https://expired.com")
-            .withExpiredAt(OffsetDateTime.now().minusDays(1));
-        Url active = new Url("active", "https://active.com");
-        repository.save(expired);
-        repository.save(active);
+        repository.save(Url.builder()
+            .shortCode("exp")
+            .originalUrl("https://expired.com")
+            .expiredAt(OffsetDateTime.now().minusDays(1))
+            .build());
+        repository.save(Url.builder().shortCode("active").originalUrl("https://active.com").build());
 
         repository.deleteExpired(OffsetDateTime.now());
 
