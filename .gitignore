@@ -25,3 +25,6 @@ docs/plans/
 
 # Harness (내부 작업 관리 문서)
 harness/
+
+# Claude 설정 (로컬 전용)
+CLAUDE.md
