@@ -35,13 +35,24 @@ export function setup() {
       { headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '10.0.0.0' } }
     );
     if (res.status === 200) {
-      codes.push(JSON.parse(res.body).shortCode);
+      try {
+        codes.push(JSON.parse(res.body).shortCode);
+      } catch { /* skip */ }
     }
   }
+
+  if (codes.length === 0) {
+    throw new Error('setup() 실패: shortCode를 하나도 생성하지 못했습니다. 서버 상태를 확인하세요.');
+  }
+
   return { codes };
 }
 
 export default function ({ codes }) {
+  if (!codes || codes.length === 0) {
+    return;
+  }
+
   if (Math.random() < 0.9) {
     const code = codes[Math.floor(Math.random() * codes.length)];
     const res = http.get(`${BASE_URL}/api/v1/${code}`, {
