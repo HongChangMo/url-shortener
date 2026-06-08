@@ -156,6 +156,15 @@ ZINCRBY url:hits {shortCode} 1   ← 메모리 누적 (DB 접근 없음)
 
 RENAME으로 원자적 교체를 하기 때문에 flush 도중 들어오는 increment는 새 `url:hits`에 안전하게 누적됩니다.
 
+### 만료 URL 정리
+
+`ExpiredUrlCleaner`가 매일 자정(`0 0 0 * * *`)에 `expired_at < NOW()`인 레코드를 DB에서 일괄 삭제합니다.
+
+```
+[매일 자정]
+ DELETE FROM urls WHERE expired_at IS NOT NULL AND expired_at < NOW()
+```
+
 ## 성능 테스트 (k6)
 
 `docker compose up --build`로 앱을 먼저 기동한 뒤 아래 명령어로 실행합니다.
