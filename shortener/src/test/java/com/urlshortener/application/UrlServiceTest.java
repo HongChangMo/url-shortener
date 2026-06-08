@@ -4,6 +4,7 @@ import com.urlshortener.domain.Url;
 import com.urlshortener.exception.UrlExpiredException;
 import com.urlshortener.exception.UrlNotFoundException;
 import com.urlshortener.domain.repository.UrlRepository;
+import com.urlshortener.infrastructure.cache.HitCounterService;
 import com.urlshortener.infrastructure.cache.UrlCacheService;
 import com.urlshortener.infrastructure.codegen.ShortCodeGenerator;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,7 @@ class UrlServiceTest {
     @Mock UrlRepository urlRepository;
     @Mock ShortCodeGenerator shortCodeGenerator;
     @Mock UrlCacheService cacheService;
+    @Mock HitCounterService hitCounterService;
 
     @InjectMocks UrlService urlService;
 
@@ -156,9 +158,10 @@ class UrlServiceTest {
     }
 
     @Test
-    void incrementAccessCount_delegatesToRepository() {
+    void incrementAccessCount_delegatesToHitCounter() {
         urlService.incrementAccessCount("abc123");
-        verify(urlRepository).incrementAccessCount("abc123", 1L);
+        verify(hitCounterService).increment("abc123");
+        verifyNoInteractions(urlRepository);
     }
 
     private Url urlWithId(Long id, String originalUrl) {

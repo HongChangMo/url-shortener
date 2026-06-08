@@ -4,6 +4,7 @@ import com.urlshortener.domain.Url;
 import com.urlshortener.exception.UrlExpiredException;
 import com.urlshortener.exception.UrlNotFoundException;
 import com.urlshortener.domain.repository.UrlRepository;
+import com.urlshortener.infrastructure.cache.HitCounterService;
 import com.urlshortener.infrastructure.cache.UrlCacheService;
 import com.urlshortener.infrastructure.codegen.ShortCodeGenerator;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ public class UrlService {
     private final UrlRepository urlRepository;
     private final ShortCodeGenerator shortCodeGenerator;
     private final UrlCacheService cacheService;
+    private final HitCounterService hitCounterService;
 
     @Transactional
     public String shorten(String originalUrl) {
@@ -69,9 +71,8 @@ public class UrlService {
         return loadFromDb(shortCode);
     }
 
-    @Transactional
     public void incrementAccessCount(String shortCode) {
-        urlRepository.incrementAccessCount(shortCode, 1L);
+        hitCounterService.increment(shortCode);
     }
 
     private String unwrap(String shortCode, String value) {
