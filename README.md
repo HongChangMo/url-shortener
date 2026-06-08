@@ -9,7 +9,7 @@ Spring Boot 기반 URL 단축 서비스
 | Language | Java 21 (Virtual Threads) |
 | Framework | Spring Boot 3.4 |
 | Database | PostgreSQL 16 + Flyway |
-| Cache | Valkey 8 (Redis fork) |
+| Cache | Valkey 8 (Redis fork) + Caffeine (L1 로컬 캐시) |
 | Build | Gradle 8 (멀티모듈) |
 | Test | JUnit 5 + Testcontainers |
 | Performance | k6 |
@@ -107,6 +107,34 @@ docker compose up --build
 | Unit | Mockito (Spring 컨텍스트 없음) | `UrlServiceTest`, `ShortCodeGeneratorTest` |
 | Integration | `@DataJpaTest` / `@DataRedisTest` + Testcontainers | `UrlJpaRepositoryTest`, `UrlCacheServiceTest` |
 | E2E | `@SpringBootTest(RANDOM_PORT)` + Testcontainers | `UrlApiE2ETest` |
+
+## 캐시 전략
+
+리다이렉트 요청(`GET /{shortCode}`)은 읽기 비중이 매우 높아 다층 캐시 구조로 DB 부하를 최소화합니다.
+
+### 요청 흐름
+
+```
+요청
+ ↓
+[L1: Caffeine — JVM 로컬, 최대 1000건, TTL 60s]
+ ↓ miss
+[L2: Valkey — 인스턴스 공유, TTL 24h]
+ ↓ miss
+[Population Lock: SETNX lock:url:{shortCode}, TTL 3s]
+ ├─ 락 획득 성공 → DB 조회 → L1+L2 동시 적재 → unlock
+ └─ 락 획득 실패 → 50ms 대기 × 3회 재시도 → L2 hit
+                                              ↓ 여전히 miss
+                                            DB 직접 조회 (폴백)
+```
+
+### 방어 전략
+
+| 문제 | 해결책 |
+|------|--------|
+| 서버 재시작 시 캐시 공백 (Cache Stampede) | Cache Warming — 시작 시 Top N URL 선적재 |
+| 존재하지 않는 키 대량 조회 (Cache Penetration) | Negative Cache — `__NULL__` sentinel 저장 (TTL 5분) |
+| Top N 밖 URL 갑작스러운 트래픽 집중 | Population Lock — 인스턴스당 DB 조회 1회로 제한 |
 
 ## 성능 테스트 (k6)
 

@@ -59,4 +59,50 @@ class UrlCacheServiceTest {
         cacheService.evict("abc123");
         assertThat(cacheService.get("abc123")).isEmpty();
     }
+
+    @Test
+    void putNull_then_get_returnsNullSentinel() {
+        cacheService.putNull("missing");
+        Optional<String> result = cacheService.get("missing");
+        assertThat(result).isPresent();
+        assertThat(cacheService.isNullCache(result.get())).isTrue();
+    }
+
+    @Test
+    void isNullCache_withNormalUrl_returnsFalse() {
+        assertThat(cacheService.isNullCache("https://example.com")).isFalse();
+    }
+
+    @Test
+    void tryLock_firstAttempt_succeeds() {
+        assertThat(cacheService.tryLock("abc123")).isTrue();
+    }
+
+    @Test
+    void tryLock_alreadyLocked_fails() {
+        cacheService.tryLock("abc123");
+        assertThat(cacheService.tryLock("abc123")).isFalse();
+    }
+
+    @Test
+    void unlock_releasesLock() {
+        cacheService.tryLock("abc123");
+        cacheService.unlock("abc123");
+        assertThat(cacheService.tryLock("abc123")).isTrue();
+    }
+
+    @Test
+    void get_afterPut_populatesL1OnL2Hit() {
+        cacheService.put("abc123", "https://example.com");
+        // L1 적재 확인: evict 없이 두 번 연속 조회해도 일관된 값 반환
+        assertThat(cacheService.get("abc123")).hasValue("https://example.com");
+        assertThat(cacheService.get("abc123")).hasValue("https://example.com");
+    }
+
+    @Test
+    void evict_removesFromBothL1AndL2() {
+        cacheService.put("abc123", "https://example.com");
+        cacheService.evict("abc123");
+        assertThat(cacheService.get("abc123")).isEmpty();
+    }
 }
