@@ -45,8 +45,64 @@ class UrlServiceTest {
     }
 
     @Test
-    void resolveOriginalUrl_cacheHit_returnsCachedUrl() {
+    void resolveOriginalUrl_l1CacheHit_returnsCachedUrl() {
         when(cacheService.get("abc123")).thenReturn(Optional.of("https://example.com"));
+
+        String result = urlService.resolveOriginalUrl("abc123");
+
+        assertThat(result).isEqualTo("https://example.com");
+        verifyNoInteractions(urlRepository);
+        verify(cacheService, never()).tryLock(any());
+    }
+
+    @Test
+    void resolveOriginalUrl_negativeCacheHit_throwsWithoutDbQuery() {
+        when(cacheService.get("missing")).thenReturn(Optional.of("__NULL__"));
+        when(cacheService.isNullCache("__NULL__")).thenReturn(true);
+
+        assertThatThrownBy(() -> urlService.resolveOriginalUrl("missing"))
+                .isInstanceOf(UrlNotFoundException.class);
+        verifyNoInteractions(urlRepository);
+        verify(cacheService, never()).tryLock(any());
+    }
+
+    @Test
+    void resolveOriginalUrl_cacheMiss_lockAcquired_queriesDbAndCaches() {
+        when(cacheService.get("abc123"))
+                .thenReturn(Optional.empty())   // 최초 확인
+                .thenReturn(Optional.empty());  // 락 획득 후 더블 체크
+        when(cacheService.tryLock("abc123")).thenReturn(true);
+        Url url = Url.builder().shortCode("abc123").originalUrl("https://example.com").build();
+        when(urlRepository.findByShortCode("abc123")).thenReturn(Optional.of(url));
+
+        String result = urlService.resolveOriginalUrl("abc123");
+
+        assertThat(result).isEqualTo("https://example.com");
+        verify(cacheService).put("abc123", "https://example.com");
+        verify(cacheService).unlock("abc123");
+    }
+
+    @Test
+    void resolveOriginalUrl_lockAcquired_doubleCheckHit_skipsDb() {
+        when(cacheService.get("abc123"))
+                .thenReturn(Optional.empty())                           // 최초 확인
+                .thenReturn(Optional.of("https://example.com"));       // 더블 체크 hit
+        when(cacheService.tryLock("abc123")).thenReturn(true);
+
+        String result = urlService.resolveOriginalUrl("abc123");
+
+        assertThat(result).isEqualTo("https://example.com");
+        verifyNoInteractions(urlRepository);
+        verify(cacheService).unlock("abc123");
+    }
+
+    @Test
+    void resolveOriginalUrl_lockNotAcquired_retriesUntilCachePopulated() {
+        when(cacheService.get("abc123"))
+                .thenReturn(Optional.empty())                           // 최초 확인
+                .thenReturn(Optional.empty())                           // 재시도 1
+                .thenReturn(Optional.of("https://example.com"));       // 재시도 2 hit
+        when(cacheService.tryLock("abc123")).thenReturn(false);
 
         String result = urlService.resolveOriginalUrl("abc123");
 
@@ -55,8 +111,9 @@ class UrlServiceTest {
     }
 
     @Test
-    void resolveOriginalUrl_cacheMiss_queriesDbAndCaches() {
+    void resolveOriginalUrl_lockNotAcquired_allRetriesFail_fallsBackToDb() {
         when(cacheService.get("abc123")).thenReturn(Optional.empty());
+        when(cacheService.tryLock("abc123")).thenReturn(false);
         Url url = Url.builder().shortCode("abc123").originalUrl("https://example.com").build();
         when(urlRepository.findByShortCode("abc123")).thenReturn(Optional.of(url));
 
@@ -67,17 +124,25 @@ class UrlServiceTest {
     }
 
     @Test
-    void resolveOriginalUrl_notFound_throwsUrlNotFoundException() {
-        when(cacheService.get(anyString())).thenReturn(Optional.empty());
-        when(urlRepository.findByShortCode(anyString())).thenReturn(Optional.empty());
+    void resolveOriginalUrl_notFound_storesNullCacheAndThrows() {
+        when(cacheService.get("missing"))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.empty());
+        when(cacheService.tryLock("missing")).thenReturn(true);
+        when(urlRepository.findByShortCode("missing")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> urlService.resolveOriginalUrl("missing"))
                 .isInstanceOf(UrlNotFoundException.class);
+        verify(cacheService).putNull("missing");
+        verify(cacheService).unlock("missing");
     }
 
     @Test
     void resolveOriginalUrl_expired_throwsUrlExpiredException() {
-        when(cacheService.get(anyString())).thenReturn(Optional.empty());
+        when(cacheService.get("exp"))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.empty());
+        when(cacheService.tryLock("exp")).thenReturn(true);
         Url expired = Url.builder()
                 .shortCode("exp")
                 .originalUrl("https://example.com")
@@ -87,6 +152,7 @@ class UrlServiceTest {
 
         assertThatThrownBy(() -> urlService.resolveOriginalUrl("exp"))
                 .isInstanceOf(UrlExpiredException.class);
+        verify(cacheService).unlock("exp");
     }
 
     @Test

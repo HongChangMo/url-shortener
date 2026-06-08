@@ -28,6 +28,10 @@ aws:
 shortener:
   sqids-salt: ${SQIDS_SALT:local-dev-salt}
   cache-warm-size: 1000
+  null-cache-ttl-seconds: 300
+  l1-cache-size: 1000
+  l1-cache-ttl-seconds: 60
+  population-lock-ttl-seconds: 3
   rate-limit:
     shorten:
       capacity: 10
