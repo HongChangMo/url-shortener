@@ -33,6 +33,7 @@ shortener:
   l1-cache-ttl-seconds: 60
   population-lock-ttl-seconds: 3
   access-count-flush-rate-ms: 60000
+  expired-url-cleanup-cron: "0 0 0 * * *"
   rate-limit:
     shorten:
       capacity: 10
