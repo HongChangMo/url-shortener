@@ -104,8 +104,8 @@ docker compose up --build
 
 | 레이어 | 방식 | 예시 |
 |--------|------|------|
-| Unit | Mockito (Spring 컨텍스트 없음) | `UrlServiceTest`, `ShortCodeGeneratorTest` |
-| Integration | `@DataJpaTest` / `@DataRedisTest` + Testcontainers | `UrlJpaRepositoryTest`, `UrlCacheServiceTest` |
+| Unit | Mockito (Spring 컨텍스트 없음) | `UrlServiceTest`, `ShortCodeGeneratorTest`, `AccessCountFlusherTest` |
+| Integration | `@DataJpaTest` / `@DataRedisTest` + Testcontainers | `UrlJpaRepositoryTest`, `UrlCacheServiceTest`, `HitCounterServiceTest` |
 | E2E | `@SpringBootTest(RANDOM_PORT)` + Testcontainers | `UrlApiE2ETest` |
 
 ## 캐시 전략
@@ -135,6 +135,26 @@ docker compose up --build
 | 서버 재시작 시 캐시 공백 (Cache Stampede) | Cache Warming — 시작 시 Top N URL 선적재 |
 | 존재하지 않는 키 대량 조회 (Cache Penetration) | Negative Cache — `__NULL__` sentinel 저장 (TTL 5분) |
 | Top N 밖 URL 갑작스러운 트래픽 집중 | Population Lock — 인스턴스당 DB 조회 1회로 제한 |
+
+## 비동기 처리
+
+### access_count 버퍼링
+
+redirect 요청마다 DB `UPDATE`를 치면 쓰기 병목이 발생합니다. Valkey Sorted Set을 버퍼로 사용해 DB 쓰기를 배치로 모읍니다.
+
+```
+GET /{shortCode}
+ ↓
+ZINCRBY url:hits {shortCode} 1   ← 메모리 누적 (DB 접근 없음)
+
+[1분 주기 AccessCountFlusher]
+ RENAME url:hits → url:hits:flushing   ← 원자적 스왑 (유실 없음)
+ ZRANGE url:hits:flushing WITHSCORES   ← 전체 읽기
+ bulk UPDATE urls SET access_count + delta   ← 단건이 아닌 배치
+ DEL url:hits:flushing
+```
+
+RENAME으로 원자적 교체를 하기 때문에 flush 도중 들어오는 increment는 새 `url:hits`에 안전하게 누적됩니다.
 
 ## 성능 테스트 (k6)
 
